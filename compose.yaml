@@ -9,7 +9,7 @@ services:
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-development}
       DEBUG: ${DEBUG:-false}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-snapstream}:${POSTGRES_PASSWORD:-snapstream}@postgres:5432/${POSTGRES_DB:-snapstream}}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-snapstream}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-snapstream}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-2592000}
       FEED_CACHE_TTL_SECONDS: ${FEED_CACHE_TTL_SECONDS:-15}
@@ -48,7 +48,7 @@ services:
     image: postgres:17-bookworm
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-snapstream}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-snapstream}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:-snapstream}
     volumes:
       - postgres_data:/var/lib/postgresql/data
