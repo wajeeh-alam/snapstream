@@ -41,6 +41,8 @@ RUN groupadd --system --gid 10001 app \
         --home-dir /home/app --shell /usr/sbin/nologin app
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
+COPY --chown=app:app alembic.ini ./alembic.ini
+COPY --chown=app:app migrations ./migrations
 
 USER 10001:10001
 
