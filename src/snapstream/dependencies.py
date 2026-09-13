@@ -21,6 +21,10 @@ def get_s3(request: Request) -> Any:
     return request.app.state.s3
 
 
+def get_s3_presigner(request: Request) -> Any:
+    return request.app.state.s3_presigner
+
+
 def get_app_settings(request: Request) -> Any:
     return request.app.state.settings
 

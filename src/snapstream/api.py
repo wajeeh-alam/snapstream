@@ -19,6 +19,7 @@ from .dependencies import (
     get_current_user,
     get_redis,
     get_s3,
+    get_s3_presigner,
 )
 from .models import Post, User
 from .schemas import (
@@ -49,6 +50,7 @@ router = APIRouter()
 Database = Annotated[AsyncSession, Depends(get_db)]
 RedisClient = Annotated[Any, Depends(get_redis)]
 S3Client = Annotated[Any, Depends(get_s3)]
+S3Presigner = Annotated[Any, Depends(get_s3_presigner)]
 AppSettings = Annotated[Settings, Depends(get_app_settings)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 BearerCredentials = Annotated[Any, Depends(bearer_scheme)]
@@ -159,7 +161,7 @@ async def me(user: CurrentUser) -> User:
 async def presign_upload(
     payload: UploadPresignRequest,
     user: CurrentUser,
-    s3: S3Client,
+    s3: S3Presigner,
     settings: AppSettings,
 ) -> UploadPresignResponse:
     try:

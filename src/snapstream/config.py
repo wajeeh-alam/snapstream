@@ -35,6 +35,7 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("AWS_ENDPOINT_URL", "S3_ENDPOINT_URL"),
     )
+    s3_presign_endpoint_url: str | None = None
     s3_object_base_url: str | None = None
     aws_access_key_id: str | None = None
     aws_secret_access_key: SecretStr | None = None
@@ -65,7 +66,7 @@ class Settings(BaseSettings):
             return value.replace("postgresql://", "postgresql+asyncpg://", 1)
         return value
 
-    @field_validator("s3_endpoint_url", mode="before")
+    @field_validator("s3_endpoint_url", "s3_presign_endpoint_url", mode="before")
     @classmethod
     def empty_string_is_none(cls, value: object) -> object:
         return None if value == "" else value

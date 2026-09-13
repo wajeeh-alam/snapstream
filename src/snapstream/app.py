@@ -15,12 +15,13 @@ from .config import Settings, get_settings
 from .db import create_engine, create_session_factory
 
 
-def _create_s3_client(settings: Settings) -> Any:
+def _create_s3_client(settings: Settings, endpoint_url: str | None = None) -> Any:
     kwargs: dict[str, Any] = {
         "region_name": settings.s3_region,
     }
-    if settings.s3_endpoint_url:
-        kwargs["endpoint_url"] = settings.s3_endpoint_url
+    resolved_endpoint = endpoint_url or settings.s3_endpoint_url
+    if resolved_endpoint:
+        kwargs["endpoint_url"] = resolved_endpoint
         # LocalStack accepts placeholder credentials and has no task-role endpoint.
         kwargs["aws_access_key_id"] = settings.aws_access_key_id or "test"
         kwargs["aws_secret_access_key"] = (
@@ -39,13 +40,14 @@ def _create_s3_client(settings: Settings) -> Any:
 class _LazyS3Client:
     """Avoid credential-provider network work until an S3 endpoint is used."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, endpoint_url: str | None = None) -> None:
         self.settings = settings
+        self.endpoint_url = endpoint_url
         self.client: Any | None = None
 
     def __getattr__(self, name: str) -> Any:
         if self.client is None:
-            self.client = _create_s3_client(self.settings)
+            self.client = _create_s3_client(self.settings, self.endpoint_url)
         return getattr(self.client, name)
 
 
@@ -62,7 +64,13 @@ def create_app(
     owned_redis = redis_client is None
     engine = engine or create_engine(settings)
     redis_client = redis_client or Redis.from_url(settings.redis_url, decode_responses=True)
+    injected_s3 = s3_client is not None
     s3_client = s3_client or _LazyS3Client(settings)
+    s3_presigner = (
+        s3_client
+        if injected_s3 or not settings.s3_presign_endpoint_url
+        else _LazyS3Client(settings, settings.s3_presign_endpoint_url)
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -85,6 +93,7 @@ def create_app(
     app.state.session_factory = create_session_factory(engine)
     app.state.redis = redis_client
     app.state.s3 = s3_client
+    app.state.s3_presigner = s3_presigner
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

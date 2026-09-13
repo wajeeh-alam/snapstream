@@ -9,6 +9,7 @@ def test_deployment_environment_aliases(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@db/snapstream")
     monkeypatch.setenv("AWS_REGION", "ca-central-1")
     monkeypatch.setenv("AWS_ENDPOINT_URL", "")
+    monkeypatch.setenv("S3_PRESIGN_ENDPOINT_URL", "")
     monkeypatch.setenv("MAX_UPLOAD_BYTES", "2048")
     monkeypatch.setenv("CORS_ORIGINS", "https://one.test,https://two.test")
 
@@ -18,6 +19,7 @@ def test_deployment_environment_aliases(monkeypatch) -> None:
     assert settings.database_url.startswith("postgresql+asyncpg://")
     assert settings.s3_region == "ca-central-1"
     assert settings.s3_endpoint_url is None
+    assert settings.s3_presign_endpoint_url is None
     assert settings.max_media_size_bytes == 2048
     assert settings.cors_origins == ["https://one.test", "https://two.test"]
 

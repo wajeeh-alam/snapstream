@@ -42,6 +42,7 @@ if [[ "${localstack_enabled}" == "true" ]]; then
   export S3_BUCKET="${S3_BUCKET:-snapstream-local}"
   export S3_REGION="${S3_REGION:-us-east-1}"
   export S3_ENDPOINT_URL="${S3_ENDPOINT_URL:-http://localstack:4566}"
+  export S3_PRESIGN_ENDPOINT_URL="${S3_PRESIGN_ENDPOINT_URL:-http://localhost:${LOCALSTACK_HOST_PORT:-4566}}"
   export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
   export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
 fi
