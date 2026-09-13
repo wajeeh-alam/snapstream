@@ -1,0 +1,38 @@
+# This file intentionally contains no credentials. Copy it to a gitignored
+# terraform.tfvars or pass it explicitly with -var-file.
+aws_region   = "us-east-1"
+project_name = "snapstream"
+environment  = "production"
+
+# Replace with an immutable release identifier that has been pushed to ECR.
+container_image_tag = "release-2026-09-13.1"
+
+# Use the exact origins hosting the SnapStream browser client.
+upload_cors_allowed_origins = [
+  "https://app.example.com",
+]
+
+# Set after issuing an ACM certificate in this region. If null, the ALB serves
+# HTTP only; when set, port 80 redirects to HTTPS.
+acm_certificate_arn = null
+
+ecs_desired_count = 2
+ecs_min_capacity  = 2
+ecs_max_capacity  = 10
+
+db_instance_class = "db.t4g.micro"
+db_multi_az       = true
+redis_node_type   = "cache.t4g.micro"
+
+feed_cache_ttl_seconds = 300
+session_ttl_seconds    = 86400
+max_upload_bytes       = 10485760
+
+# Keep uploaded post media by default. Set a retention period only if your
+# product also removes or repairs expired media references in PostgreSQL.
+upload_lifecycle_days = 0
+
+additional_tags = {
+  Owner      = "platform"
+  CostCenter = "snapstream"
+}
