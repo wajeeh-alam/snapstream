@@ -1,0 +1,104 @@
+name: ${COMPOSE_PROJECT_NAME:-snapstream}
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DEBUG: ${DEBUG:-false}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-snapstream}:${POSTGRES_PASSWORD:-snapstream}@postgres:5432/${POSTGRES_DB:-snapstream}}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-2592000}
+      FEED_CACHE_TTL_SECONDS: ${FEED_CACHE_TTL_SECONDS:-15}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_PRESIGN_ENDPOINT_URL: ${S3_PRESIGN_ENDPOINT_URL:-}
+      S3_OBJECT_BASE_URL: ${S3_OBJECT_BASE_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    ports:
+      - "127.0.0.1:${CONDUCTOR_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-snapstream}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-snapstream}
+      POSTGRES_DB: ${POSTGRES_DB:-snapstream}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  redis:
+    image: redis:7-bookworm
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Optional AWS/S3 emulator. Start it with:
+  #   ./scripts/dev.sh --profile localstack
+  localstack:
+    image: localstack/localstack:4
+    profiles: ["localstack"]
+    environment:
+      SERVICES: s3
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-snapstream-local}
+      PERSISTENCE: "1"
+    ports:
+      - "127.0.0.1:${LOCALSTACK_HOST_PORT:-4566}:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/10-create-bucket.sh:ro
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:4566/_localstack/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  # scripts/compose.sh supplies a workspace-specific Compose project name, so
+  # each Conductor workspace gets its own persistent data volumes.
+  postgres_data:
+  redis_data:
+  localstack_data:

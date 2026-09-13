@@ -1,0 +1,21 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+[scripts]
+setup = "uv sync --frozen"
+run_mode = "concurrent"
+archive = "./scripts/stop.sh"
+
+[scripts.run.dev]
+available_in = ["local"]
+command = "./scripts/dev.sh"
+default = true
+icon = "server"
+
+[scripts.run.dev-localstack]
+available_in = ["local"]
+command = "./scripts/dev.sh --profile localstack"
+icon = "cloud"
+
+[[preview_urls]]
+name = "API readiness"
+url = "http://localhost:$CONDUCTOR_PORT/health/ready"
