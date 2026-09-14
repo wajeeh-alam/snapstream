@@ -7,7 +7,12 @@ from uuid import uuid4
 from botocore.exceptions import BotoCoreError, ClientError
 
 from .config import Settings
-from .schemas import MediaReference, UploadPresignRequest, UploadPresignResponse
+from .schemas import (
+    MediaDownloadResponse,
+    MediaReference,
+    UploadPresignRequest,
+    UploadPresignResponse,
+)
 
 _EXTENSIONS = {
     "image/jpeg": ".jpg",
@@ -25,6 +30,24 @@ class InvalidMedia(ValueError):
 
 class MediaServiceUnavailable(RuntimeError):
     """S3 could not be reached to verify media."""
+
+
+def create_presigned_download(
+    s3: Any, bucket: str, key: str, settings: Settings
+) -> MediaDownloadResponse:
+    try:
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": key},
+            ExpiresIn=settings.upload_url_ttl_seconds,
+            HttpMethod="GET",
+        )
+    except (BotoCoreError, ClientError) as exc:
+        raise MediaServiceUnavailable("could not create media URL") from exc
+    return MediaDownloadResponse(
+        download_url=url,
+        expires_in=settings.upload_url_ttl_seconds,
+    )
 
 
 def validate_media_contract(content_type: str, size_bytes: int, settings: Settings) -> None:

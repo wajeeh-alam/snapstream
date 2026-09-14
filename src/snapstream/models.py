@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -50,3 +50,38 @@ class Post(Base):
         server_default=func.now(),
     )
     author: Mapped[User] = relationship(back_populates="posts")
+
+
+class Like(Base):
+    __tablename__ = "likes"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    post_id: Mapped[str] = mapped_column(
+        ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+    )
+
+
+class Follow(Base):
+    __tablename__ = "follows"
+    __table_args__ = (
+        CheckConstraint("follower_id <> followed_id", name="ck_follows_not_self"),
+    )
+
+    follower_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    followed_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+    )
