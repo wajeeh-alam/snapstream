@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid5
 
+from redis.asyncio import Redis
 from sqlalchemy import delete, func, select
 
 from .app import _create_s3_client
@@ -197,6 +198,15 @@ async def seed_demo(settings: Settings, password: str, *, reset: bool = False) -
             await db.commit()
     finally:
         await engine.dispose()
+
+    redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    try:
+        await redis.incr("feed:generation")
+    except Exception:
+        # Demo content is still valid when Redis is intentionally unavailable.
+        pass
+    finally:
+        await redis.aclose()
 
     return {"users": len(user_ids), "posts": len(post_ids)}
 
