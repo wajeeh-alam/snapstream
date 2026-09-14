@@ -1,14 +1,16 @@
 # SnapStream
 
-SnapStream is a small production-oriented social feed API built to demonstrate
-the AWS path from local containers to a horizontally scaled ECS deployment.
+SnapStream is a production-oriented social feed demo built to show the complete
+path from local containers to a horizontally scaled ECS deployment. It includes
+a responsive browser client, fictional seed content, social interactions,
+private media uploads, and a resilient cached API.
 
 ## Architecture
 
-- FastAPI serves authentication, upload signing, post creation, and recent or
-  trending feeds.
-- PostgreSQL stores users, posts, and private S3 object metadata. Media bytes
-  never pass through the API or its container filesystem.
+- FastAPI serves the zero-build frontend plus authentication, upload signing,
+  post creation, likes, follows, and recent or trending feeds.
+- PostgreSQL stores users, posts, likes, follows, and private S3 object metadata.
+  Media bytes never pass through the API or its container filesystem.
 - Redis stores opaque user sessions and short-lived feed responses. Creating a
   post advances a cache generation so stale feeds are no longer read.
 - Browsers upload directly to a private S3 bucket with a short-lived presigned
@@ -33,6 +35,35 @@ In another terminal, apply the schema and check readiness:
 ./scripts/compose.sh exec api alembic upgrade head
 curl "http://127.0.0.1:${CONDUCTOR_PORT:-8000}/health/ready"
 ```
+
+### Explore the browser demo
+
+With the stack running, seed 8 fictional creators, 24 posts, social interactions,
+and generated image assets. The password is read from your shell and is never
+stored in the repository:
+
+```sh
+read -s DEMO_PASSWORD && export DEMO_PASSWORD
+./scripts/seed_demo.sh --reset
+```
+
+Open `http://127.0.0.1:${CONDUCTOR_PORT:-8000}/` and sign in as
+`maya_frames` with the password you entered. You can switch between recent and
+trending feeds, like posts, follow creators, upload media, and publish a post.
+The seed command is deterministic and safe to rerun; `--reset` replaces only its
+known demo users and their related records. It refuses to run when `APP_ENV` is
+not `development`, `local`, or `test`.
+
+To test the implementation without using AWS credits:
+
+```sh
+uv run pytest -q
+curl "http://127.0.0.1:${CONDUCTOR_PORT:-8000}/health/ready"
+curl "http://127.0.0.1:${CONDUCTOR_PORT:-8000}/feed?kind=trending&limit=5"
+```
+
+The optional LocalStack container emulates S3 locally. Running this workflow
+does not create chargeable AWS resources.
 
 Without Docker, the application test suite is infrastructure-free:
 
@@ -81,6 +112,10 @@ name and host port for each Conductor workspace.
    verification.
 5. `GET /feed?kind=recent` or `GET /feed?kind=trending` reads the Redis-cached
    feed, falling back to PostgreSQL when the cache is unavailable.
+6. `POST`/`DELETE /posts/{post_id}/likes` and
+   `POST`/`DELETE /users/{user_id}/follow` provide idempotent social actions.
+7. `GET /posts/{post_id}/media-url` creates a short-lived view URL for private
+   media without making the S3 bucket public.
 
 Interactive API documentation is available at `/docs` while the service runs.
 Liveness is `/health/live`; dependency readiness is `/health/ready`.
