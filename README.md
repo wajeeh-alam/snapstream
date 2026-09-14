@@ -41,6 +41,34 @@ uv sync --extra test
 uv run pytest -q
 ```
 
+## Reproducible feed benchmark
+
+With the Docker stack running, measure both the Redis-cached feed and the
+PostgreSQL fallback path:
+
+```sh
+PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH" \
+  ./scripts/benchmark_feed.sh
+```
+
+The script seeds 100 posts, sends 1,000 feed requests at concurrency 20,
+reports throughput plus mean/p50/p95/p99/max latency, stops Redis, repeats the
+same workload against the database fallback, and restores Redis even if the
+benchmark fails. Override the workload with `BENCHMARK_REQUESTS`,
+`BENCHMARK_CONCURRENCY`, and `BENCHMARK_SEED_POSTS`. Results describe one local
+machine and should not be presented as production capacity; keep the workload,
+hardware, and environment alongside any published numbers.
+
+On the recorded three-trial Apple M5/Docker baseline, the Redis-cached path
+delivered 6.7x the median throughput (2,219.1 versus 330.7 req/s) and 85% lower
+median p50 latency (8.50 versus 57.96 ms) than the Redis-unavailable fallback.
+After Redis was deliberately stopped, all 3,000 sampled fallback requests still
+returned HTTP 200. These are local comparative results, not production capacity
+measurements.
+
+See [`docs/feed-benchmark.md`](docs/feed-benchmark.md) for the recorded local
+baseline, exact environment, limitations, and comparison methodology.
+
 Stop the local stack with `./scripts/stop.sh`. Compose uses a distinct project
 name and host port for each Conductor workspace.
 
