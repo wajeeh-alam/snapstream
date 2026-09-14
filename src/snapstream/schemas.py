@@ -103,6 +103,11 @@ class MediaResponse(BaseModel):
     size_bytes: int
 
 
+class MediaDownloadResponse(BaseModel):
+    download_url: str
+    expires_in: int
+
+
 class PostCreateRequest(BaseModel):
     body: str = Field(default="", max_length=2000)
     media: MediaReference | None = None
@@ -131,6 +136,17 @@ class PostResponse(BaseModel):
 class FeedResponse(BaseModel):
     kind: Literal["recent", "trending"]
     items: list[PostResponse]
+
+
+class LikeResponse(BaseModel):
+    post_id: str
+    likes_count: int
+    liked: bool
+
+
+class FollowResponse(BaseModel):
+    user_id: str
+    following: bool
 
 
 class HealthResponse(BaseModel):

@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import desc, func, or_, select, text
+from sqlalchemy import case, delete, desc, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,11 +21,14 @@ from .dependencies import (
     get_s3,
     get_s3_presigner,
 )
-from .models import Post, User
+from .models import Follow, Like, Post, User
 from .schemas import (
     FeedResponse,
+    FollowResponse,
     HealthResponse,
+    LikeResponse,
     LoginRequest,
+    MediaDownloadResponse,
     MediaReference,
     MediaResponse,
     PostCreateRequest,
@@ -41,6 +44,7 @@ from .security import hash_password, new_session_token, session_digest, verify_p
 from .uploads import (
     InvalidMedia,
     MediaServiceUnavailable,
+    create_presigned_download,
     create_presigned_upload,
     verify_uploaded_media,
 )
@@ -153,6 +157,14 @@ async def me(user: CurrentUser) -> User:
     return user
 
 
+@router.get("/users", response_model=list[PublicUserResponse])
+async def list_users(
+    db: Database,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[User]:
+    return list((await db.scalars(select(User).order_by(User.username).limit(limit))).all())
+
+
 @router.post(
     "/uploads/presign",
     response_model=UploadPresignResponse,
@@ -230,6 +242,102 @@ async def create_post(
     post.author = user
     await _invalidate_feed(redis)
     return _post_response(post)
+
+
+@router.get("/posts/{post_id}/media-url", response_model=MediaDownloadResponse)
+async def get_post_media_url(
+    post_id: str,
+    db: Database,
+    s3: S3Presigner,
+    settings: AppSettings,
+) -> MediaDownloadResponse:
+    post = await db.get(Post, post_id)
+    if post is None or post.media_key is None or post.media_bucket is None:
+        raise HTTPException(status_code=404, detail="post media not found")
+    try:
+        return create_presigned_download(s3, post.media_bucket, post.media_key, settings)
+    except MediaServiceUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/posts/{post_id}/likes", response_model=LikeResponse)
+async def like_post(
+    post_id: str,
+    user: CurrentUser,
+    db: Database,
+    redis: RedisClient,
+) -> LikeResponse:
+    post = await db.get(Post, post_id)
+    if post is None:
+        raise HTTPException(status_code=404, detail="post not found")
+    existing = await db.get(Like, (user.id, post_id))
+    if existing is None:
+        db.add(Like(user_id=user.id, post_id=post_id))
+        await db.execute(
+            update(Post).where(Post.id == post_id).values(likes_count=Post.likes_count + 1)
+        )
+        try:
+            await db.commit()
+            await _invalidate_feed(redis)
+        except IntegrityError:
+            await db.rollback()
+    await db.refresh(post)
+    return LikeResponse(post_id=post_id, likes_count=post.likes_count, liked=True)
+
+
+@router.delete("/posts/{post_id}/likes", response_model=LikeResponse)
+async def unlike_post(
+    post_id: str,
+    user: CurrentUser,
+    db: Database,
+    redis: RedisClient,
+) -> LikeResponse:
+    post = await db.get(Post, post_id)
+    if post is None:
+        raise HTTPException(status_code=404, detail="post not found")
+    removed = await db.execute(
+        delete(Like).where(Like.user_id == user.id, Like.post_id == post_id)
+    )
+    if removed.rowcount:
+        await db.execute(
+            update(Post)
+            .where(Post.id == post_id)
+            .values(likes_count=case((Post.likes_count > 0, Post.likes_count - 1), else_=0))
+        )
+        await db.commit()
+        await _invalidate_feed(redis)
+    await db.refresh(post)
+    return LikeResponse(post_id=post_id, likes_count=post.likes_count, liked=False)
+
+
+async def _set_follow(
+    *, following: bool, target_id: str, user: User, db: AsyncSession
+) -> FollowResponse:
+    if target_id == user.id:
+        raise HTTPException(status_code=422, detail="users cannot follow themselves")
+    if await db.get(User, target_id) is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    existing = await db.get(Follow, (user.id, target_id))
+    if following and existing is None:
+        db.add(Follow(follower_id=user.id, followed_id=target_id))
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+    elif not following and existing is not None:
+        await db.delete(existing)
+        await db.commit()
+    return FollowResponse(user_id=target_id, following=following)
+
+
+@router.post("/users/{user_id}/follow", response_model=FollowResponse)
+async def follow_user(user_id: str, user: CurrentUser, db: Database) -> FollowResponse:
+    return await _set_follow(following=True, target_id=user_id, user=user, db=db)
+
+
+@router.delete("/users/{user_id}/follow", response_model=FollowResponse)
+async def unfollow_user(user_id: str, user: CurrentUser, db: Database) -> FollowResponse:
+    return await _set_follow(following=False, target_id=user_id, user=user, db=db)
 
 
 async def _read_feed_cache(redis: Any, key: str) -> FeedResponse | None:
