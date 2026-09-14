@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="SnapStream — a fast, resilient social feed demo.">
+    <title>SnapStream</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="/" aria-label="SnapStream home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 40 40"><path d="M8 9h24v16a7 7 0 0 1-7 7H15a7 7 0 0 1-7-7V9Z"/><circle cx="20" cy="20" r="6"/><path d="M13 9V6m14 3V6"/></svg>
+          </span>
+          <span>snapstream</span>
+        </a>
+
+        <nav aria-label="Primary navigation">
+          <button class="nav-item active" data-feed="recent">
+            <span aria-hidden="true">⌁</span> Latest
+          </button>
+          <button class="nav-item" data-feed="trending">
+            <span aria-hidden="true">↗</span> Trending
+          </button>
+          <a class="nav-item" href="/docs" target="_blank">
+            <span aria-hidden="true">{ }</span> API docs
+          </a>
+        </nav>
+
+        <div class="sidebar-card">
+          <span class="eyebrow">System status</span>
+          <div class="status-line"><span class="status-dot"></span><span id="system-status">Checking services</span></div>
+          <p>FastAPI · PostgreSQL · Redis · S3</p>
+        </div>
+
+        <div class="session-card" id="session-card">
+          <div class="avatar small" id="session-avatar">S</div>
+          <div class="session-copy">
+            <strong id="session-name">Guest explorer</strong>
+            <span id="session-handle">Sign in to interact</span>
+          </div>
+          <button class="icon-button" id="session-action" title="Account">···</button>
+        </div>
+      </aside>
+
+      <main>
+        <header class="mobile-header">
+          <a class="brand" href="/">snapstream</a>
+          <button class="button secondary compact" id="mobile-auth">Sign in</button>
+        </header>
+
+        <section class="hero">
+          <div>
+            <span class="eyebrow">A social feed, end to end</span>
+            <h1>Small moments,<br><em>beautifully streamed.</em></h1>
+            <p>Explore a live demo backed by PostgreSQL, Redis caching, and private S3 media.</p>
+          </div>
+          <div class="hero-stat" aria-label="Feed mode">
+            <span id="mode-label">LATEST</span>
+            <strong id="post-count">—</strong>
+            <small>stories loaded</small>
+          </div>
+        </section>
+
+        <section class="composer" id="composer">
+          <div class="avatar" id="composer-avatar">+</div>
+          <form id="post-form">
+            <textarea id="post-body" maxlength="2000" rows="2" placeholder="Share something worth remembering…"></textarea>
+            <div class="composer-actions">
+              <label class="media-picker" for="post-media">
+                <span aria-hidden="true">▧</span> Add photo or video
+              </label>
+              <input id="post-media" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm">
+              <span class="file-name" id="file-name"></span>
+              <button class="button primary" type="submit">Share post <span>↗</span></button>
+            </div>
+          </form>
+          <button class="composer-lock" id="composer-lock">Sign in to share your own story</button>
+        </section>
+
+        <div class="feed-toolbar">
+          <div class="mobile-tabs" role="tablist">
+            <button class="active" data-feed="recent">Latest</button>
+            <button data-feed="trending">Trending</button>
+          </div>
+          <button class="quiet-button" id="refresh-feed">Refresh <span>↻</span></button>
+        </div>
+
+        <section class="feed" id="feed" aria-live="polite">
+          <div class="skeleton-card"><div></div><div></div><div></div></div>
+          <div class="skeleton-card"><div></div><div></div><div></div></div>
+        </section>
+      </main>
+
+      <aside class="rail">
+        <div class="rail-card welcome-card">
+          <span class="eyebrow">Demo account</span>
+          <h2>Jump into the stream.</h2>
+          <p>Seed the project, then sign in as <strong>@maya_frames</strong> with your chosen demo password.</p>
+          <button class="button light full" id="rail-auth">Sign in to demo</button>
+        </div>
+        <div class="rail-card people-card">
+          <div class="rail-heading"><h3>People to discover</h3><span>LIVE</span></div>
+          <div id="people-list" class="people-list"><p class="muted">Loading creators…</p></div>
+        </div>
+        <footer>Fictional demo data · <a href="/docs">OpenAPI</a><br>Built for learning, designed to ship.</footer>
+      </aside>
+    </div>
+
+    <dialog id="auth-dialog">
+      <button class="dialog-close" id="dialog-close" aria-label="Close">×</button>
+      <span class="eyebrow">Welcome to SnapStream</span>
+      <h2 id="auth-title">Sign in to the stream</h2>
+      <p id="auth-subtitle">Use a seeded demo account or your own.</p>
+      <div class="auth-tabs">
+        <button class="active" data-auth-mode="login">Sign in</button>
+        <button data-auth-mode="register">Create account</button>
+      </div>
+      <form id="auth-form">
+        <div class="register-only hidden">
+          <label for="display-name">Display name</label>
+          <input id="display-name" autocomplete="name" placeholder="Maya Chen">
+        </div>
+        <div class="register-only hidden">
+          <label for="email">Email</label>
+          <input id="email" type="email" autocomplete="email" placeholder="you@example.com">
+        </div>
+        <label for="login">Username <span class="login-only">or email</span></label>
+        <input id="login" autocomplete="username" placeholder="maya_frames" required>
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" minlength="8" required>
+        <p class="form-error" id="auth-error"></p>
+        <button class="button primary full" type="submit" id="auth-submit">Sign in</button>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status"></div>
+  </body>
+</html>

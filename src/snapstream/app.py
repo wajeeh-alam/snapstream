@@ -2,17 +2,22 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import boto3
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .api import router
 from .config import Settings, get_settings
 from .db import create_engine, create_session_factory
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 def _create_s3_client(settings: Settings, endpoint_url: str | None = None) -> Any:
@@ -98,10 +103,16 @@ def create_app(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials="*" not in settings.cors_origins,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
     app.include_router(router)
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    @app.get("/", include_in_schema=False)
+    async def demo_frontend() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html")
+
     return app
 
 
