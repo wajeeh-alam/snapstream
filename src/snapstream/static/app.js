@@ -5,6 +5,12 @@ const state = {
   liked: new Set(JSON.parse(localStorage.getItem("snapstream_liked") || "[]")),
   following: new Set(JSON.parse(localStorage.getItem("snapstream_following") || "[]")),
   authMode: "login",
+  config: {
+    public_demo: false,
+    registration_enabled: true,
+    uploads_enabled: true,
+    static_demo: false,
+  },
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -37,15 +43,15 @@ function avatarStyle(id) {
   let hash = 0;
   for (const character of id) hash = ((hash << 5) - hash + character.charCodeAt(0)) | 0;
   const hue = Math.abs(hash) % 360;
-  return `background:linear-gradient(135deg,hsl(${hue} 52% 47%),hsl(${(hue + 48) % 360} 68% 67%))`;
+  return `background:hsl(${hue} 48% 46%)`;
 }
 
 function relativeTime(value) {
   const seconds = Math.max(1, Math.floor((Date.now() - new Date(value)) / 1000));
-  if (seconds < 60) return "just now";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
+  if (seconds < 60) return "now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
 }
 
 let toastTimer;
@@ -63,16 +69,25 @@ function requireAuth() {
   return false;
 }
 
+async function enterStaticDemo() {
+  const demoUser = window.SNAPSTREAM_STATIC_DEMO?.user;
+  if (!demoUser) return;
+  setSession({ access_token: "portfolio-demo", user: demoUser });
+  toast(`Demoing as ${demoUser.display_name}`);
+  await Promise.all([loadFeed(), loadPeople()]);
+}
+
 function renderSession() {
   const loggedIn = Boolean(state.token && state.user);
+  const demoMode = Boolean(state.config.static_demo);
   $("#composer").classList.toggle("authenticated", loggedIn);
   $("#session-name").textContent = loggedIn ? state.user.display_name : "Guest explorer";
-  $("#session-handle").textContent = loggedIn ? `@${state.user.username}` : "Sign in to interact";
+  $("#session-handle").textContent = loggedIn ? `@${state.user.username}` : demoMode ? "Enter interactive demo" : "Sign in to interact";
   $("#session-avatar").textContent = loggedIn ? initials(state.user.display_name) : "S";
   $("#composer-avatar").textContent = loggedIn ? initials(state.user.display_name) : "+";
   $("#session-action").title = loggedIn ? "Sign out" : "Sign in";
-  $("#mobile-auth").textContent = loggedIn ? "Sign out" : "Sign in";
-  $("#rail-auth").textContent = loggedIn ? `Signed in as @${state.user.username}` : "Sign in to demo";
+  $("#mobile-auth").textContent = loggedIn ? (demoMode ? "Reset demo" : "Sign out") : (demoMode ? "Enter demo" : "Sign in");
+  $("#rail-auth").textContent = loggedIn ? `${demoMode ? "Demoing" : "Signed in"} as @${state.user.username}` : (demoMode ? "Enter interactive demo" : "Sign in to demo");
 }
 
 function setSession(session) {
@@ -89,12 +104,18 @@ function setSession(session) {
 }
 
 function openAuth() {
+  if (state.config.static_demo) {
+    enterStaticDemo();
+    return;
+  }
   $("#auth-error").textContent = "";
+  if (!state.config.registration_enabled) setAuthMode("login");
   $("#auth-dialog").showModal();
   setTimeout(() => $("#login").focus(), 50);
 }
 
 function setAuthMode(mode) {
+  if (mode === "register" && !state.config.registration_enabled) return;
   state.authMode = mode;
   $$('[data-auth-mode]').forEach((button) => button.classList.toggle("active", button.dataset.authMode === mode));
   $$(".register-only").forEach((element) => element.classList.toggle("hidden", mode !== "register"));
@@ -103,6 +124,38 @@ function setAuthMode(mode) {
   $("#auth-submit").textContent = mode === "login" ? "Sign in" : "Create account";
   $("#email").required = mode === "register";
   $("#display-name").required = mode === "register";
+}
+
+async function loadPublicConfig() {
+  try {
+    state.config = await api("/config/public");
+  } catch {
+    // Preserve the fully featured defaults for older API deployments.
+  }
+  const registerTab = $('[data-auth-mode="register"]');
+  registerTab.classList.toggle("hidden", !state.config.registration_enabled);
+  if (state.config.static_demo) {
+    document.body.classList.add("static-demo");
+    $("#demo-notice").hidden = false;
+    $("#portfolio-card").hidden = false;
+    $("#composer-lock").textContent = "Enter demo to post";
+    $("#architecture-copy").textContent = "Interactive sample data running entirely in your browser.";
+    $("#stack-copy").textContent = "No API keys · no cloud spend";
+    $(".welcome-card h2").textContent = "Interactive demo";
+    $("#demo-copy").innerHTML = "Explore as <strong>@maya_frames</strong>. Likes, follows, and posts stay on this device.";
+  }
+  if (state.config.public_demo && !state.config.registration_enabled && !state.config.static_demo) {
+    $("#auth-subtitle").textContent = "Use the fictional demo account; public sign-up is disabled.";
+    $("#demo-copy").innerHTML = "Sign in as <strong>@maya_frames</strong> with the published demo password.";
+  }
+  if (!state.config.uploads_enabled) {
+    $("#post-media").disabled = true;
+    $("#media-picker").classList.add("hidden");
+    if (!state.config.static_demo) {
+      $("#architecture-copy").textContent = "PostgreSQL-backed feed with Redis fallback. Media uploads are disabled in this deployment.";
+      $("#stack-copy").textContent = "FastAPI · PostgreSQL · Redis";
+    }
+  }
 }
 
 async function submitAuth(event) {
@@ -123,7 +176,7 @@ async function submitAuth(event) {
     setSession(session);
     $("#auth-dialog").close();
     toast(`Welcome, ${session.user.display_name}`);
-    await loadPeople();
+    await Promise.all([loadFeed(), loadPeople()]);
   } catch (error) {
     $("#auth-error").textContent = error.message;
   } finally {
@@ -133,9 +186,18 @@ async function submitAuth(event) {
 
 async function signOut() {
   if (state.token) {
-    await api("/auth/logout", { method: "POST" }).catch(() => null);
+    if (state.config.static_demo) {
+      localStorage.removeItem("snapstream_demo_posts");
+      localStorage.removeItem("snapstream_liked");
+      localStorage.removeItem("snapstream_following");
+      state.liked.clear();
+      state.following.clear();
+    } else {
+      await api("/auth/logout", { method: "POST" }).catch(() => null);
+    }
     setSession(null);
-    toast("Signed out");
+    toast(state.config.static_demo ? "Demo reset" : "Signed out");
+    await Promise.all([loadFeed(), loadPeople()]);
   } else openAuth();
 }
 
@@ -163,20 +225,20 @@ function postTemplate(post, index) {
   const liked = state.liked.has(post.id);
   const media = post.media
     ? `<div class="media-placeholder" data-media-id="${post.id}">Loading private media…</div>` : "";
-  return `<article class="post-card" style="animation-delay:${Math.min(index, 8) * 35}ms">
-    <div class="post-content">
+  return `<article class="post-card" id="post-${post.id}" style="animation-delay:${Math.min(index, 8) * 25}ms">
+    <div class="avatar small" style="${avatarStyle(post.author.id)}">${escapeHtml(initials(post.author.display_name))}</div>
+    <div class="post-column">
       <div class="post-head">
-        <div class="avatar small" style="${avatarStyle(post.author.id)}">${escapeHtml(initials(post.author.display_name))}</div>
         <div class="post-author"><strong>${escapeHtml(post.author.display_name)}</strong><span>@${escapeHtml(post.author.username)}</span></div>
-        ${mine ? "" : `<button class="follow-button ${following ? "following" : ""}" data-follow="${post.author.id}">${following ? "Following" : "+ Follow"}</button>`}
+        <span class="post-time">${relativeTime(post.created_at)}</span>
+        ${mine ? "" : `<button class="follow-button ${following ? "following" : ""}" data-follow="${post.author.id}">${following ? "Following" : "Follow"}</button>`}
       </div>
       ${post.body ? `<p class="post-body">${escapeHtml(post.body)}</p>` : ""}
-    </div>
-    ${media}
-    <div class="post-actions">
-      <button class="action-button ${liked ? "liked" : ""}" data-like="${post.id}"><span class="heart">${liked ? "♥" : "♡"}</span><span data-like-count>${post.likes_count}</span></button>
-      <button class="action-button" data-copy="${post.id}">⌁ Share</button>
-      <span class="post-time">${relativeTime(post.created_at)}</span>
+      ${media}
+      <div class="post-actions">
+        <button class="action-button ${liked ? "liked" : ""}" data-like="${post.id}" aria-label="Like post"><span class="heart">${liked ? "♥" : "♡"}</span><span data-like-count>${post.likes_count}</span></button>
+        <button class="action-button" data-copy="${post.id}" aria-label="Copy link"><span class="share-icon">↗</span><span>Share</span></button>
+      </div>
     </div>
   </article>`;
 }
@@ -192,6 +254,12 @@ async function hydrateMedia(posts) {
       element.src = result.download_url;
       element.alt = post.body ? `Media shared with: ${post.body}` : "SnapStream post media";
       if (element.tagName === "VIDEO") { element.controls = true; element.preload = "metadata"; }
+      element.addEventListener("error", () => {
+        const unavailable = document.createElement("div");
+        unavailable.className = "media-placeholder unavailable";
+        unavailable.textContent = "Media unavailable";
+        element.replaceWith(unavailable);
+      }, { once: true });
       placeholder.replaceWith(element);
     } catch { placeholder.textContent = "Media temporarily unavailable"; }
   }));
@@ -222,7 +290,7 @@ async function toggleFollow(userId) {
     localStorage.setItem("snapstream_following", JSON.stringify([...state.following]));
     $$(`[data-follow="${userId}"]`).forEach((button) => {
       button.classList.toggle("following", result.following);
-      button.textContent = result.following ? "Following" : "+ Follow";
+      button.textContent = result.following ? "Following" : "Follow";
     });
   } catch (error) { toast(error.message); }
 }
@@ -233,7 +301,7 @@ async function loadPeople() {
     $("#people-list").innerHTML = users.map((user) => `<div class="person">
       <div class="avatar small" style="${avatarStyle(user.id)}">${escapeHtml(initials(user.display_name))}</div>
       <div class="person-copy"><strong>${escapeHtml(user.display_name)}</strong><span>@${escapeHtml(user.username)}</span></div>
-      <button data-follow="${user.id}" class="${state.following.has(user.id) ? "following" : ""}">${state.following.has(user.id) ? "Following" : "+ Follow"}</button>
+      <button data-follow="${user.id}" class="${state.following.has(user.id) ? "following" : ""}">${state.following.has(user.id) ? "Following" : "Follow"}</button>
     </div>`).join("") || '<p class="muted">No creators yet.</p>';
   } catch { $("#people-list").innerHTML = '<p class="muted">Creators unavailable.</p>'; }
 }
@@ -246,7 +314,7 @@ async function submitPost(event) {
   const file = $("#post-media").files[0];
   if (!body && !file) return toast("Add a caption or choose media first.");
   button.disabled = true;
-  button.textContent = "Sharing…";
+  button.textContent = "Posting…";
   try {
     let media = null;
     if (file) {
@@ -262,12 +330,12 @@ async function submitPost(event) {
     await api("/posts", { method: "POST", body: { body, media } });
     event.currentTarget.reset();
     $("#file-name").textContent = "";
-    toast("Post shared");
+    toast("Posted");
     state.feed = "recent";
     updateFeedControls();
     await loadFeed();
   } catch (error) { toast(error.message); }
-  finally { button.disabled = false; button.innerHTML = "Share post <span>↗</span>"; }
+  finally { button.disabled = false; button.textContent = "Post"; }
 }
 
 function updateFeedControls() {
@@ -277,7 +345,7 @@ function updateFeedControls() {
 async function checkHealth() {
   try {
     await api("/health/ready");
-    $("#system-status").textContent = "All systems ready";
+    $("#system-status").textContent = state.config.static_demo ? "Interactive demo ready" : "All systems ready";
     $(".status-dot")?.classList.add("ready");
   } catch { $("#system-status").textContent = "Service degraded"; }
 }
@@ -302,8 +370,17 @@ $("#rail-auth").addEventListener("click", () => state.token ? null : openAuth())
 $("#session-action").addEventListener("click", signOut);
 $("#mobile-auth").addEventListener("click", signOut);
 $("#refresh-feed").addEventListener("click", loadFeed);
+$("#sidebar-post").addEventListener("click", () => {
+  if (!requireAuth()) return;
+  $("#post-body").focus();
+});
 $("#post-media").addEventListener("change", (event) => { $("#file-name").textContent = event.target.files[0]?.name || ""; });
 
-renderSession();
-setAuthMode("login");
-Promise.all([loadFeed(), loadPeople(), checkHealth()]);
+async function initialize() {
+  await loadPublicConfig();
+  renderSession();
+  setAuthMode("login");
+  await Promise.all([loadFeed(), loadPeople(), checkHealth()]);
+}
+
+initialize();

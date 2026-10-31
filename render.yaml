@@ -1,0 +1,56 @@
+services:
+  - type: web
+    name: snapstream-demo
+    runtime: docker
+    plan: 0.5c-512mb
+    region: ohio
+    numInstances: 1
+    autoDeployTrigger: "off"
+    healthCheckPath: /health/live
+    preDeployCommand: alembic upgrade head
+    initialDeployHook: python -m snapstream.seed --reset --allow-production-demo
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: PUBLIC_DEMO
+        value: "true"
+      - key: REGISTRATION_ENABLED
+        value: "false"
+      - key: DEMO_SEED_ENABLED
+        value: "true"
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: snapstream-demo-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: snapstream-demo-cache
+          type: keyvalue
+          property: connectionString
+      - key: SESSION_TTL_SECONDS
+        value: "604800"
+      - key: FEED_CACHE_TTL_SECONDS
+        value: "15"
+
+  - type: keyvalue
+    name: snapstream-demo-cache
+    plan: free
+    region: ohio
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru
+    persistenceMode: "off"
+
+databases:
+  - name: snapstream-demo-db
+    databaseName: snapstream_demo
+    user: snapstream_demo
+    plan: 0.1c-256mb
+    diskSizeGB: 1
+    storageAutoscalingEnabled: false
+    postgresMajorVersion: "17"
+    region: ohio
+    ipAllowList: []

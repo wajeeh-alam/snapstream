@@ -33,6 +33,7 @@ from .schemas import (
     MediaResponse,
     PostCreateRequest,
     PostResponse,
+    PublicConfigResponse,
     PublicUserResponse,
     RegisterRequest,
     SessionResponse,
@@ -91,6 +92,8 @@ async def register(
     redis: RedisClient,
     settings: AppSettings,
 ) -> SessionResponse:
+    if not settings.registration_enabled:
+        raise HTTPException(status_code=403, detail="registration is disabled for this demo")
     exists = await db.scalar(
         select(User.id).where(
             or_(func.lower(User.email) == payload.email, User.username == payload.username)
@@ -116,6 +119,15 @@ async def register(
     await db.refresh(user)
     token = await _save_session(redis, user.id, settings)
     return _session_response(user, token, settings)
+
+
+@router.get("/config/public", response_model=PublicConfigResponse)
+async def public_config(settings: AppSettings) -> PublicConfigResponse:
+    return PublicConfigResponse(
+        public_demo=settings.public_demo,
+        registration_enabled=settings.registration_enabled,
+        uploads_enabled=bool(settings.s3_bucket),
+    )
 
 
 @router.post("/auth/login", response_model=SessionResponse)

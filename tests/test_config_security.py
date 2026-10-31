@@ -6,6 +6,8 @@ from snapstream.security import hash_password, new_session_token, session_digest
 
 def test_deployment_environment_aliases(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("PUBLIC_DEMO", "true")
+    monkeypatch.setenv("REGISTRATION_ENABLED", "false")
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@db/snapstream")
     monkeypatch.setenv("AWS_REGION", "ca-central-1")
     monkeypatch.setenv("AWS_ENDPOINT_URL", "")
@@ -16,6 +18,8 @@ def test_deployment_environment_aliases(monkeypatch) -> None:
     settings = Settings(_env_file=None)
 
     assert settings.environment == "production"
+    assert settings.public_demo is True
+    assert settings.registration_enabled is False
     assert settings.database_url.startswith("postgresql+asyncpg://")
     assert settings.s3_region == "ca-central-1"
     assert settings.s3_endpoint_url is None

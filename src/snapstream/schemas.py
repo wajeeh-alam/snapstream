@@ -65,6 +65,12 @@ class SessionResponse(BaseModel):
     user: UserResponse
 
 
+class PublicConfigResponse(BaseModel):
+    public_demo: bool
+    registration_enabled: bool
+    uploads_enabled: bool
+
+
 class UploadPresignRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=255)
     content_type: str = Field(min_length=1, max_length=127)

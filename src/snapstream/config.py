@@ -22,6 +22,9 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("APP_ENV", "ENVIRONMENT"),
     )
     debug: bool = False
+    public_demo: bool = False
+    registration_enabled: bool = True
+    demo_seed_enabled: bool = False
     database_url: str = "postgresql+asyncpg://snapstream:snapstream@localhost:5432/snapstream"
     redis_url: str = "redis://localhost:6379/0"
     session_ttl_seconds: int = Field(default=60 * 60 * 24 * 30, ge=60, le=60 * 60 * 24 * 365)

@@ -43,6 +43,7 @@ RUN groupadd --system --gid 10001 app \
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --chown=app:app alembic.ini ./alembic.ini
 COPY --chown=app:app migrations ./migrations
+COPY --chown=app:app scripts/start.sh ./scripts/start.sh
 
 USER 10001:10001
 
@@ -50,6 +51,6 @@ EXPOSE 8000
 STOPSIGNAL SIGTERM
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)"]
+    CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.getenv('PORT', '8000')}/health/live\", timeout=3)"]
 
-CMD ["uvicorn", "snapstream.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/scripts/start.sh"]

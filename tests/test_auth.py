@@ -75,3 +75,24 @@ async def test_session_backend_failure_returns_service_unavailable(
     response = await client.get("/users/me", headers={"Authorization": "Bearer opaque"})
 
     assert response.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_registration_can_be_disabled_for_public_demo(
+    test_context: tuple[object, FakeRedis, FakeS3],
+) -> None:
+    client, _, _ = test_context
+    client._transport.app.state.settings.registration_enabled = False
+
+    response = await client.post(
+        "/auth/register",
+        json={
+            "email": "visitor@example.com",
+            "username": "visitor",
+            "display_name": "Visitor",
+            "password": "not-a-real-password",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "registration is disabled for this demo"

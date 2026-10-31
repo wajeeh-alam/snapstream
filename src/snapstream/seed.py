@@ -13,6 +13,7 @@ from uuid import UUID, uuid5
 
 from redis.asyncio import Redis
 from sqlalchemy import delete, func, select
+from sqlalchemy.engine import make_url
 
 from .app import _create_s3_client
 from .config import Settings
@@ -21,6 +22,7 @@ from .models import Follow, Like, Post, User
 from .security import hash_password
 
 DEMO_NAMESPACE = UUID("88b6bc7e-5d0b-4210-9906-c6e1afaa73c7")
+PRODUCTION_DEMO_DATABASE_NAME = "snapstream_demo"
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,23 @@ def _id(kind: str, name: str) -> str:
     return str(uuid5(DEMO_NAMESPACE, f"{kind}:{name}"))
 
 
+def ensure_demo_seed_allowed(settings: Settings, *, allow_production_demo: bool) -> None:
+    """Refuse production seeding unless every demo-only guard is explicit."""
+    if settings.environment.lower() in {"development", "local", "test"}:
+        return
+    if not settings.demo_seed_enabled or not allow_production_demo:
+        raise RuntimeError(
+            "production demo seeding requires DEMO_SEED_ENABLED=true and "
+            "--allow-production-demo"
+        )
+    database_name = make_url(settings.database_url).database
+    if database_name != PRODUCTION_DEMO_DATABASE_NAME:
+        raise RuntimeError(
+            "production demo seeding is restricted to the "
+            f"{PRODUCTION_DEMO_DATABASE_NAME!r} database"
+        )
+
+
 def gradient_png(
     width: int,
     height: int,
@@ -109,9 +128,14 @@ def gradient_png(
     )
 
 
-async def seed_demo(settings: Settings, password: str, *, reset: bool = False) -> dict[str, int]:
-    if settings.environment.lower() not in {"development", "local", "test"}:
-        raise RuntimeError("demo seeding is disabled outside development/local/test")
+async def seed_demo(
+    settings: Settings,
+    password: str,
+    *,
+    reset: bool = False,
+    allow_production_demo: bool = False,
+) -> dict[str, int]:
+    ensure_demo_seed_allowed(settings, allow_production_demo=allow_production_demo)
 
     engine = create_engine(settings)
     session_factory = create_session_factory(engine)
@@ -214,11 +238,23 @@ async def seed_demo(settings: Settings, password: str, *, reset: bool = False) -
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reset", action="store_true", help="replace existing demo records")
+    parser.add_argument(
+        "--allow-production-demo",
+        action="store_true",
+        help="acknowledge seeding the dedicated production demo database",
+    )
     args = parser.parse_args()
     password = os.environ.get("DEMO_PASSWORD")
     if not password or len(password) < 8:
         parser.error("DEMO_PASSWORD must be set to at least 8 characters")
-    result = asyncio.run(seed_demo(Settings(), password, reset=args.reset))
+    result = asyncio.run(
+        seed_demo(
+            Settings(),
+            password,
+            reset=args.reset,
+            allow_production_demo=args.allow_production_demo,
+        )
+    )
     print(f"Seeded {result['users']} fictional users and {result['posts']} posts.")
     print(f"Demo login: {PEOPLE[0].username} (password from DEMO_PASSWORD)")
 

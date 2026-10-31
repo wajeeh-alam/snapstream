@@ -52,7 +52,9 @@ Open `http://127.0.0.1:${CONDUCTOR_PORT:-8000}/` and sign in as
 trending feeds, like posts, follow creators, upload media, and publish a post.
 The seed command is deterministic and safe to rerun; `--reset` replaces only its
 known demo users and their related records. It refuses to run when `APP_ENV` is
-not `development`, `local`, or `test`.
+not `development`, `local`, or `test` unless production demo seeding is
+explicitly enabled, the CLI acknowledgement is present, and the target database
+name is exactly `snapstream_demo`.
 
 To test the implementation without using AWS credits:
 
@@ -70,6 +72,33 @@ Without Docker, the application test suite is infrastructure-free:
 ```sh
 uv sync --extra test
 uv run pytest -q
+```
+
+## Zero-cost portfolio demo
+
+The `portfolio-demo` branch contains a GitHub Pages deployment of the existing
+frontend. It uses deterministic fictional data and a small browser-only API
+adapter, so recent and trending feeds, text posts, likes, follows, and the demo
+session remain clickable without a database, cache, object store, API keys, or
+paid resources. State stays in the visitor's browser and can be reset from the
+account control. It is a product walkthrough, not a production backend or a
+shared multi-user service.
+
+The public Portfolio, GitHub, X, and LinkedIn buttons are configured in
+[`demo/demo-config.js`](demo/demo-config.js). Never put tokens, passwords,
+private profile data, or analytics secrets in that file.
+
+GitHub Pages is free for this public repository and is intended for static
+personal project showcases. The deployment publishes only the generated static
+artifact; it does not copy `.env`, server code, or local data. A production
+deployment of the FastAPI/PostgreSQL/Redis/S3 architecture is available on
+request, but is intentionally not kept running because it would incur ongoing
+infrastructure costs.
+
+Build the exact Pages artifact locally with:
+
+```sh
+./scripts/build_static_demo.sh
 ```
 
 ## Reproducible feed benchmark
@@ -119,6 +148,41 @@ name and host port for each Conductor workspace.
 
 Interactive API documentation is available at `/docs` while the service runs.
 Liveness is `/health/live`; dependency readiness is `/health/ready`.
+
+## Hosted demo status
+
+The public demo has not been provisioned yet. Provisioning is intentionally
+paused for approval because the durable Render configuration in `render.yaml`
+creates paid resources. Add the real `onrender.com` URL and published demo
+password here only after the live deployment has been verified.
+
+The Blueprint keeps `APP_ENV=production`, runs Alembic before each release, and
+seeds only once through Render's initial deploy hook. Production seeding needs
+`DEMO_SEED_ENABLED=true`, `--allow-production-demo`, and a database named exactly
+`snapstream_demo`. The database is separate from any real application data,
+contains fictional accounts only, and public self-registration is disabled.
+
+Current planned limitations:
+
+- The shared `maya_frames` account can like, follow, and create text posts, so
+  visitors can change the common demo state.
+- Uploads are disabled until a separate S3-compatible object store is approved
+  and configured. Keeping the service stateless is preferable to storing uploads
+  on one web instance's disk.
+- Render's free Key Value instance is an in-memory cache. A cache restart signs
+  users out, while public feeds continue through the PostgreSQL fallback.
+- The smallest always-on web service and paid PostgreSQL instance were about
+  $13 USD/month combined as of 2026-10-29, before bandwidth or storage growth.
+  Render documents a [$7 web plan](https://render.com/pricing), paid PostgreSQL
+  starting at [$6/month](https://render.com/articles/managed-postgresql-pricing-2026),
+  and estimates the same [$13/month combination](https://render.com/articles/how-much-does-cloud-application-hosting-cost-for-small-businesses).
+  The free PostgreSQL alternative [expires after 30 days and has no backups](https://render.com/docs/free),
+  so it does not meet this demo's persistence requirement.
+
+Deployment requires accepting Render's [Terms of Service](https://render.com/terms)
+and [Acceptable Use Policy](https://render.com/acceptable-use). No account,
+payment method, paid resource, or AWS resource has been created as part of this
+preparation.
 
 ## Deploy to AWS
 
