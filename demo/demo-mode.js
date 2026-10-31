@@ -152,7 +152,7 @@
   ).join("");
 
   document.querySelectorAll('a[href="/docs"]').forEach((link) => {
-    link.href = `${config.github_url || "https://github.com/wajeeh-alam/snapstream"}#api-flow`;
+    link.href = `${config.source_url || "https://github.com/wajeeh-alam/snapstream"}#api-flow`;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.textContent = "View source";

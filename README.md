@@ -76,6 +76,8 @@ uv run pytest -q
 
 ## Zero-cost portfolio demo
 
+**Live demo: [wajeeh-alam.github.io/snapstream](https://wajeeh-alam.github.io/snapstream/)**
+
 The `portfolio-demo` branch contains a GitHub Pages deployment of the existing
 frontend. It uses deterministic fictional data and a small browser-only API
 adapter, so recent and trending feeds, text posts, likes, follows, and the demo
@@ -83,6 +85,17 @@ session remain clickable without a database, cache, object store, API keys, or
 paid resources. State stays in the visitor's browser and can be reset from the
 account control. It is a product walkthrough, not a production backend or a
 shared multi-user service.
+
+Live demo limitations:
+
+- Authentication is a local demo session, not a real account system.
+- Posts, likes, and follows are stored in `localStorage`, are visible only to
+  that visitor, and can be cleared by the browser.
+- Sample media is bundled artwork. Uploads are disabled because persistent
+  private uploads require an external object store with ongoing cost.
+- The static site has no live PostgreSQL or Redis service, so cache failure
+  cannot be demonstrated on GitHub Pages. The repository's automated tests and
+  local benchmark exercise the API's PostgreSQL fallback when Redis is down.
 
 The public Portfolio, GitHub, X, and LinkedIn buttons are configured in
 [`demo/demo-config.js`](demo/demo-config.js). Never put tokens, passwords,
@@ -151,10 +164,14 @@ Liveness is `/health/live`; dependency readiness is `/health/ready`.
 
 ## Hosted demo status
 
-The public demo has not been provisioned yet. Provisioning is intentionally
-paused for approval because the durable Render configuration in `render.yaml`
-creates paid resources. Add the real `onrender.com` URL and published demo
-password here only after the live deployment has been verified.
+The zero-cost static demo is live on GitHub Pages at
+[wajeeh-alam.github.io/snapstream](https://wajeeh-alam.github.io/snapstream/).
+It publishes only fictional sample data and browser-local interactions; no
+secrets, private data, database, cache, or object storage are deployed.
+
+The production backend has intentionally not been provisioned. The durable
+Render configuration in `render.yaml` would create paid resources, so it remains
+an opt-in deployment path rather than part of the public portfolio demo.
 
 The Blueprint keeps `APP_ENV=production`, runs Alembic before each release, and
 seeds only once through Render's initial deploy hook. Production seeding needs
@@ -162,7 +179,7 @@ seeds only once through Render's initial deploy hook. Production seeding needs
 `snapstream_demo`. The database is separate from any real application data,
 contains fictional accounts only, and public self-registration is disabled.
 
-Current planned limitations:
+Limitations of a future shared backend demo:
 
 - The shared `maya_frames` account can like, follow, and create text posts, so
   visitors can change the common demo state.
